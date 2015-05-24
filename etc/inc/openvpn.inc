@@ -582,8 +582,33 @@ function openvpn_reconfigure($mode, $settings) {
 			case 'server_user':
 			case 'server_tls_user':
 				if (!empty($ip) && !empty($mask)) {
-					$conf .= "server {$ip} {$mask}\n";
-					if(is_ipaddr($ipv6))
+					$conf .= "mode server\n";
+					$baselong = ip2long32($ip) & gen_subnet_mask_long($mask);
+					$subnetsize = subnet_size($settings['tunnel_network']);
+					if ($settings['dev_mode'] == "tap" or $settings['topology_subnet']) {
+						$serverip = long2ip32($baselong + 1);
+						$dynamic_start = long2ip32($baselong + 2);
+						$dynamic_end = long2ip32($baselong + $subnetsize - 2);
+						$conf .= "ifconfig {$serverip} {$mask}\n";
+						$conf .= "push \"route-gateway {$serverip}\"\n";
+						if ($settings['pool_enable']) {
+							$conf .= "ifconfig-pool {$dynamic_start} {$dynamic_end} {$mask}\n";
+						}
+					} else {
+						$serverip1 = long2ip32($baselong + 1);
+						$serverip2 = long2ip32($baselong + 2);
+						$dynamic_start = long2ip32($baselong + 4);
+						$dynamic_end = long2ip32($baselong + $subnetsize - 4);
+						$conf .= "ifconfig {$serverip1} {$serverip2}\n";
+						if ($settings['pool_enable']) {
+							$conf .= "ifconfig-pool {$dynamic_start} {$dynamic_end}\n";
+						}
+						$conf .= "route {$ip} {$mask}\n";
+						if (!$settings['client-to-client']) {
+							$conf .= "push \"route {$serverip1}\"\n";
+						}
+					}
+					if (is_ipaddr($ipv6))
 						$conf .= "server-ipv6 {$ipv6}/{$prefix}\n";
 					$conf .= "client-config-dir {$g['varetc_path']}/openvpn-csc\n";
 				} else {
